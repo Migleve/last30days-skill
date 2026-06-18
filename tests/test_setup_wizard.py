@@ -537,25 +537,27 @@ class TestGetSetupStatusText:
         assert "printing-press-library" in text
 
     def test_status_text_digg_installed_off_path(self):
+        home = Path.home()
+        digg_path = str(home / ".local" / "bin" / "digg-pp-cli")
         results = {"cookies_found": {}, "ytdlp_action": "already_installed",
                    "digg_action": "installed_off_path",
-                   "digg_path": "/Users/me/.local/bin/digg-pp-cli",
+                   "digg_path": digg_path,
                    "env_written": False}
         text = setup_wizard.get_setup_status_text(results)
         assert "not on PATH" in text
-        assert ".local/bin" in text
+        assert "$HOME/.local/bin" in text
         assert "now active" not in text.lower()
 
-    def test_status_text_digg_off_path_uses_actual_dir(self):
-        """The PATH instruction names the dir where the binary was ACTUALLY found,
-        not a hardcoded ~/.local/bin (Greptile #590)."""
+    def test_status_text_digg_installed_off_path_legacy_go_bin(self):
+        """PATH hint names the actual install dir as $HOME-relative, not ~/.local/bin."""
+        home = Path.home()
+        digg_path = str(home / "go" / "bin" / "digg-pp-cli")
         results = {"cookies_found": {}, "ytdlp_action": "already_installed",
                    "digg_action": "installed_off_path",
-                   "digg_path": "/Users/me/go/bin/digg-pp-cli",
+                   "digg_path": digg_path,
                    "env_written": False}
         text = setup_wizard.get_setup_status_text(results)
-        assert "/Users/me/go/bin/digg-pp-cli" in text
-        assert "add /Users/me/go/bin to PATH" in text
+        assert "$HOME/go/bin" in text
         assert ".local/bin" not in text
 
     def test_status_text_digg_no_npx(self):
