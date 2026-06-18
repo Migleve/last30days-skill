@@ -249,8 +249,15 @@ def cmd_config(args):
         print(json.dumps({"action": "config", "key": "daily_budget", "value": str(args.value)}))
         return
     if args.key == "delivery":
-        store.set_setting("delivery_channel", str(args.value))
-        print(json.dumps({"action": "config", "key": "delivery_channel", "value": str(args.value)}))
+        value = str(args.value)
+        # Reject a non-https channel at write time so the operator gets
+        # immediate feedback, rather than discovering it via a stderr line
+        # buried in a research run hours later. Matches the delivery-time guard
+        # in _deliver_findings.
+        if value and urllib.parse.urlparse(value).scheme != "https":
+            raise SystemExit(f"delivery_channel must be an https:// URL, got {value!r}")
+        store.set_setting("delivery_channel", value)
+        print(json.dumps({"action": "config", "key": "delivery_channel", "value": value}))
         return
     raise SystemExit(f"Unknown config key: {args.key}")
 
