@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.9.4] - 2026-07-04
+
+### Fixed
+
+- First-run wizard: the welcome message and the ScrapeCreators GitHub device code are now engine-driven instead of model-authored, because a real cold run showed the model skipping the welcome and never surfacing the device code no matter how forceful the SKILL.md prose. The welcome is printed by a new `last30days.py --welcome` command that Step 1 relays verbatim (single source of truth; it can't be skipped or drift), and the GitHub device flow is split into `setup --github-start` (submits, copies the code to the clipboard, prints it to stdout, opens the browser, returns immediately) and `setup --github-poll` (waits for authorization and persists the key). The one-shot `setup --github` still chains both. The code now always appears in the command output, and the "on your clipboard" claim is only made when the copy actually succeeded. ([#748](https://github.com/mvanhorn/last30days-skill/pull/748))
+
 ## [3.9.3] - 2026-07-04
 
 ### Added
