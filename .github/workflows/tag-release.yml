@@ -13,13 +13,14 @@ permissions: {}
 jobs:
   tag:
     runs-on: ubuntu-latest
+    # Fork syncs retain upstream PR references; they must not publish releases.
     # Only act on the release-prep commit shape produced by prepare-release.yml
     # (or an equivalent manual chore(release) commit). Quote the expression —
     # a bare `chore(release):` colon is invalid YAML and fails the whole
     # workflow before any job runs. Use contains (not startsWith) so merge
     # commits whose subject is "Merge pull request #N …" still match when the
     # PR title is in the body.
-    if: "contains(github.event.head_commit.message, 'chore(release): bump version to ')"
+    if: "!github.event.repository.fork && contains(github.event.head_commit.message, 'chore(release): bump version to ')"
     permissions:
       contents: write
       actions: write
