@@ -140,7 +140,7 @@ class TestChangelogWorkflow(unittest.TestCase):
         yaml.safe_load(text)
         self.assertRegex(
             text,
-            r'(?m)^\s+if:\s+"contains\(github\.event\.head_commit\.message, '
+            r'(?m)^\s+if:\s+"!github\.event\.repository\.fork && contains\(github\.event\.head_commit\.message, '
             r"'chore\(release\): bump version to '\)\"\s*$",
         )
         # VERSION parse must scan the full message (merge commits put the
