@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 import re
+import shlex
 import subprocess
 import tempfile
 import unittest
@@ -172,6 +173,51 @@ class TestChangelogWorkflow(unittest.TestCase):
             label=str(path),
         )
 
+    def test_changelog_guard_skips_dependabot_without_fragment(self) -> None:
+        """Dependabot PRs must not need skip-changelog or a fragment.
+
+        mcp/* is an engine path, so gomod bumps fail the fragment gate unless
+        the author is exempted. Label-only exemption is not enough: Dependabot
+        cannot reliably apply skip-changelog (custom labels replace defaults
+        and missing repo labels are dropped). SKIP_CHANGELOG=1 from the
+        Dependabot author check must precede the fragment gate and must not
+        be reset afterwards.
+        """
+        text = (ROOT / ".github" / "workflows" / "changelog-guard.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("PR_AUTHOR: ${{ github.event.pull_request.user.login }}", text)
+        self.assertIn("dependabot[bot]", text)
+        dependabot_assign = re.search(
+            r'if \[ "\$\{PR_AUTHOR\}" = "dependabot\[bot\]" \]; then\n'
+            r"\s+SKIP_CHANGELOG=1",
+            text,
+        )
+        self.assertIsNotNone(
+            dependabot_assign,
+            "Dependabot must set SKIP_CHANGELOG=1 from PR_AUTHOR",
+        )
+        fragment_gate = (
+            'if [ "${touches_engine}" -eq 1 ] && [ "${has_fragment}" -eq 0 ]'
+            ' && [ "${SKIP_CHANGELOG}" -eq 0 ]; then'
+        )
+        gate_at = text.find(fragment_gate)
+        self.assertNotEqual(
+            gate_at,
+            -1,
+            "Fragment gate must still consult SKIP_CHANGELOG",
+        )
+        self.assertLess(
+            dependabot_assign.start(),
+            gate_at,
+            "Dependabot SKIP_CHANGELOG=1 must precede the fragment gate",
+        )
+        self.assertNotIn(
+            "SKIP_CHANGELOG=0",
+            text[dependabot_assign.end() :],
+            "SKIP_CHANGELOG must not be reset after the Dependabot assignment",
+        )
+
     def test_run_block_indent_checker_rejects_column_zero(self) -> None:
         malformed = (
             "jobs:\n"
@@ -184,6 +230,38 @@ class TestChangelogWorkflow(unittest.TestCase):
         )
         with self.assertRaises(AssertionError):
             _assert_run_blocks_indented(malformed, label="synthetic")
+
+    def test_reference_only_changes_follow_the_runtime_fragment_gate(self) -> None:
+        workflow = yaml.safe_load((ROOT / ".github/workflows/changelog-guard.yml").read_text())
+        blocks = [
+            step["run"] for job in workflow["jobs"].values() for step in job["steps"]
+            if "has_fragment=0" in step.get("run", "")
+        ]
+        self.assertEqual(1, len(blocks))
+        gate = blocks[0][blocks[0].index("has_fragment=0"):]
+        references = (
+            "skills/last30days/references/setup-wizard.md",
+            "skills/last30days/references/comparison.md",
+        )
+        for reference in references:
+            cases = (
+                ([reference], "0", 1),
+                ([reference, "changelog.d/1230.changed.md"], "0", 0),
+                ([reference], "1", 0),
+                (["README.md"], "0", 0),
+            )
+            for changed, skip, expected in cases:
+                with self.subTest(changed=changed, skip=skip):
+                    setup = "CHANGED=(" + " ".join(shlex.quote(path) for path in changed) + ")\n"
+                    result = subprocess.run(
+                        ["bash", "-euc", setup + gate], text=True, capture_output=True,
+                        env={**os.environ, "SKIP_CHANGELOG": skip},
+                    )
+                    self.assertEqual(expected, result.returncode, result.stdout + result.stderr)
+                    if expected:
+                        self.assertIn("Engine/skill changes need a changelog.d fragment", result.stdout)
+                    else:
+                        self.assertIn("Changelog guard passed", result.stdout)
 
     def test_read_manifest_version_helper(self) -> None:
         script = ROOT / ".github" / "scripts" / "read_manifest_version.py"
