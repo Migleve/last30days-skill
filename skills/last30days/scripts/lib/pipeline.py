@@ -85,7 +85,7 @@ from . import (
 from .cluster import cluster_candidates
 from . import fusion
 from . import render
-from .fusion import collapse_duplicate_urls, weighted_rrf
+from .fusion import collapse_duplicate_urls, source_item_key, weighted_rrf
 
 DISCOVERY_SOURCES = ("reddit", "hackernews", "digg", "x")
 _DISCOVERY_GENERIC_DOMAIN_TERMS = {
@@ -674,7 +674,7 @@ def _fetch_discovery_source(
     if source == "digg":
         result = digg.search_digg(plan.domain, from_date, to_date, depth=depth)
         items = digg.parse_digg_response(result, query=plan.domain)
-        # Digg is an AI-focused broad listing, so keep only domain-bearing
+        # Digg's AI and Tech sections are a broad listing, so keep only domain-bearing
         # clusters when scoped; global trending keeps the whole feed.
         if keyword_gate:
             items = [
@@ -2359,10 +2359,14 @@ def run(
         config["_hiring_signals_mode"] = True
         if not requested_sources:
             available = ["jobs"]
+    available = [source for source in available if source not in excluded_sources]
     if not available:
         raise RuntimeError("No sources are available for this run.")
 
-    planner_requested_sources = requested_sources
+    planner_requested_sources = (
+        [source for source in requested_sources if source not in excluded_sources]
+        if requested_sources else None
+    )
     if hiring_signals_mode and not planner_requested_sources:
         planner_requested_sources = ["jobs"]
 
@@ -2383,6 +2387,9 @@ def run(
             external_plan, topic, available, planner_requested_sources, depth,
             honor_plan_sources=True,
         )
+        # Quick runs keep the sanitizer's two-source budget.
+        if depth != "quick":
+            _ensure_unplanned_lanes_in_host_plan(plan, available)
         plan_source = "external"
     else:
         _check_research(config)
@@ -3042,6 +3049,14 @@ def run(
         bundle.items_by_source, topic=topic, config=config, depth=depth, mock=mock,
         elapsed=time.monotonic() - run_started,
     )
+    retained_markets = {
+        source_item_key(item) for item in items_by_source.get("polymarket", [])
+    }
+    for key, stream in bundle.items_by_source_and_query.items():
+        if key[1] == "polymarket":
+            bundle.items_by_source_and_query[key] = [
+                item for item in stream if source_item_key(item) in retained_markets
+            ]
     source_status = _finalize_source_status(bundle.source_status, items_by_source)
 
     candidates = weighted_rrf(
@@ -3765,6 +3780,53 @@ def _ensure_devto_in_plan(plan: schema.QueryPlan, available: list[str]) -> None:
         plan.source_weights = planner._normalize_weights(plan.source_weights)
 
 
+# Sources that are available only because the user installed their CLI or opted
+# in (INCLUDE_SOURCES, --search, a targeting flag). A host plan that names none
+# of them in any subquery almost always means the host planner never knew to
+# list them, not that it chose to skip them, so they ride the primary subquery.
+# Paid lanes with their own host decision step (amazon, meta_ads) stay out;
+# EXCLUDE_SOURCES and --search already filter ``available``.
+HOST_PLAN_BACKFILL_SOURCES = (
+    "digg",
+    "arxiv",
+    "techmeme",
+    "bluesky",
+    "truthsocial",
+    "stocktwits",
+    "linkedin",
+    "dripstack",
+    "devto",
+    "telegram",
+    "trustpilot",
+)
+
+
+def _ensure_unplanned_lanes_in_host_plan(
+    plan: schema.QueryPlan,
+    available: list[str],
+) -> None:
+    if not plan.subqueries:
+        return
+    planned = {source for subquery in plan.subqueries for source in subquery.sources}
+    missing = [
+        source for source in HOST_PLAN_BACKFILL_SOURCES
+        if source in available and source not in planned
+    ]
+    if not missing:
+        return
+    plan.subqueries[0].sources.extend(missing)
+    for source in missing:
+        plan.source_weights.setdefault(source, 1.0)
+    plan.source_weights = planner._normalize_weights(plan.source_weights)
+    log.source_log(
+        "Planner",
+        "Added installed/opted-in sources absent from every --plan subquery to "
+        f"{plan.subqueries[0].label}: {', '.join(missing)} "
+        "(set EXCLUDE_SOURCES to skip them).",
+        tty_only=False,
+    )
+
+
 def _external_plan_names_source(external_plan: Any, source: str) -> bool:
     if not isinstance(external_plan, dict):
         return False
@@ -4162,7 +4224,12 @@ def _finalize_source_status(
         elif state == health.OK and not count:
             state = outcome.lane_failure_state or schema.NO_RESULTS
         elif state == schema.PARTIAL and not count:
-            state = http.classify_failure(message=detail or "")
+            if source == "digg" and digg.is_stale_note(detail):
+                # A stale Digg copy that matched nothing is an empty answer
+                # with a coverage note, not a failed search.
+                state = schema.NO_RESULTS
+            else:
+                state = http.classify_failure(message=detail or "")
         finalized[source] = schema.SourceOutcome(
             source=source,
             state=state,
@@ -6182,6 +6249,9 @@ def _retrieve_stream_impl(
         # Enrichment with attached X posts is deferred to
         # _finalize_items_by_source so it runs on the items that actually
         # survive dedupe rather than on top-K of the raw fanout.
+        stale = digg.stale_note(result)
+        if stale:
+            return items, _outcome_artifact(health.PARTIAL, stale)
         return items, _result_outcome_artifact(source, result)
     if source == "arxiv":
         result = arxiv.search_arxiv(subquery.search_query, from_date, to_date, depth=depth)
