@@ -9,6 +9,58 @@ This project uses [towncrier](https://towncrier.readthedocs.io/). Upcoming notes
 
 <!-- towncrier release notes start -->
 
+## [3.33.2] - 2026-11-10
+
+### Fixed
+
+- X search no longer fails with "Internal server error" when an earlier browser holds an expired x.com session. With `FROM_BROWSER=auto`, if X rejects the session from the first browser that has one (for example an old Safari login), the engine retries the search with the next browser's session (for example Chrome) and keeps using it for the rest of the run. When no other browser has a working session, the error names the browser whose session failed and is reported as an auth failure.
+
+
+## [3.33.1] - 2026-11-10
+
+### Fixed
+
+- YouTube no longer comes back empty for topics with a big back catalog, such as a music artist whose top search results are years-old official videos. When the relevance search finds fewer than 3 videos inside a recent window, the engine retries once with YouTube's own upload-date filter (this week, month, or year) and merges the new uploads. An age-restricted video in the results is also no longer mistaken for a bot block, which had been cancelling transcripts for the whole search.
+
+
+## [3.33.0] - 2026-11-10
+
+### Security
+
+- Limit the Bright Data CLI child environment to its own API key and runtime, credential-location, TLS and proxy settings, preventing unrelated provider secrets from being inherited even when no explicit Bright Data key is configured.
+
+### Fixed
+
+- Instagram searches that find no reels now show `no results` in Source Coverage instead of `error: HTTP 404`. A 404 from the Google discovery fallback is treated as a clean miss, matching the primary reels search; other fallback failures are still reported. ([#1370](https://github.com/mvanhorn/last30days-skill/issues/1370))
+- Enablement topics such as "best Grok AI bot to control my computer agent" now plan as how-to research, with subqueries for the built-in route and the third-party MCP servers, CLIs and automation tools that give the named tool that capability, instead of a strict-recent comparison about the tool.
+- In Claude Code, reports no longer contain markdown lists: KEY PATTERNS numbers and suggestion bullets are written as plain lines that look the same. While a list streamed, Claude Code could redraw every link in the reply as `label (url)`, leaving the scrolled-off part of a report with visible URLs. Other hosts are unchanged.
+- Plural topics like "AI coding agents" or "prediction markets" are classified into their category again, so discovery and subreddit resolution add the category's peer subreddits instead of finding no category.
+- Questions such as "best Grok bot to control my computer" now surface the general tools that answer them (MCP servers, agent CLIs, browser automation), not only posts about the named tool. The planner always adds a search for the capability itself, also when the LLM planner is unavailable. The candidate pool keeps a few of those results, spread across sources. The reranker no longer caps them for not naming the tool the question names.
+- Recommendation reports use available source voices without requiring X posts, and their example follows the root output format.
+- Reports stop printing a like, upvote, view, or point count beside every quote and source. Engagement numbers still decide what gets quoted, but a count now appears in the summary only when its size is the finding (a comparison, a contrast, or a surprise); otherwise the report says "the top comment" or drops the number. Polymarket odds, the `creator` and `exec` registers, and the stats footer are unchanged.
+
+
+## [3.32.0] - 2026-11-09
+
+### Security
+
+- Keep synthesis, citation, and response-format instructions in the skill and MCP tool description rather than research output. Compact and comparison reports retain source evidence, coverage warnings, footer data, and structural boundaries without commands to override the host's response format.
+- Make explicit cookie refusal (`BROWSER_CONSENT=false` or `FROM_BROWSER=off`) disable the agentcookie sidecar as well as native browser and CDP reads, including availability checks. User-supplied credentials and sidecar behavior without an explicit refusal are unchanged.
+
+  Existing sidecar users with either refusal setting must remove both `BROWSER_CONSENT` and `FROM_BROWSER` from the process environment, the active global `.env` (including a custom `LAST30DAYS_CONFIG_DIR`), and any trusted project `.claude/last30days.env`, then set `AGENTCOOKIE=on` to restore sidecar-only access. Native browser and CDP reads remain disabled with both settings absent; `BROWSER_CONSENT=true` would also permit CDP reads.
+
+### Fixed
+
+- Accept query plans from standard input with `--plan -` and use a quoted heredoc in the research runbook, so Codex can start research without a temporary-plan cleanup trap. ([#1346](https://github.com/mvanhorn/last30days-skill/issues/1346))
+- Identify Google discovery fallback failures in Instagram search results and Source Coverage, preserving clean no-reels responses, recovered reels across queries or creators, and the most specific typed HTTP failure. ([#1356](https://github.com/mvanhorn/last30days-skill/issues/1356))
+- A YouTube lane keeps 60 to 75 seconds for transcripts before it starts another expanded search. After yt-dlp hits a bot-check or HTTP 429, including over SSH, the rest of that search's transcripts go to ScrapeCreators when a key is set, and a transcript cut off by the lane deadline is logged as that deadline.
+- Amazon research works again with Bright Data CLI 0.4.0 and newer, which removed the named pipeline commands the engine called. Older CLIs now get a clear upgrade message (`npm i -g @brightdata/cli@latest`).
+- Research on an organization whose first word names other things (for example "Pace Capital" vs. Pace Morby) no longer writes up the namesakes. The planner can now anchor such organizations by full name, anchored runs drop namesake items from the footer counts and Top voices too, and synthesis drops a different entity with the same name silently instead of noting it is unrelated.
+- X, Threads and planner searches no longer keep a question's closing "?" in the core subject: "What is Claude Code?" now searches for "claude code" instead of "claude code?", and a noise word or suffix right before the "?" is stripped as it is without one.
+- `--search` with only sources that can't run here (for example telegram or tiktok without a ScrapeCreators key) now names those sources and exits 2 instead of ending in a traceback.
+- `store.store_findings` now collapses duplicate URLs within a single batch and coalesces null engagement scores during conflict upserts so a single run never inflates `sighting_count` or `findings_updated` for a newly discovered URL.
+
+
 ## [3.31.0] - 2026-10-27
 
 ### Security
