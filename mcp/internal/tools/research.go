@@ -31,6 +31,22 @@ const BrowserCookiesEnvOverride = "LAST30DAYS_MCP_ALLOW_BROWSER_COOKIES"
 // as CLAUDECODE) would hit the engine's LAW 7 host-plan gate and exit 2.
 const allowEnginePlanEnv = "LAST30DAYS_ALLOW_ENGINE_PLAN=1"
 
+// noJobsDigestEnv has the engine leave the "## Jobs Digest" section out. With
+// no digest to stand in for them, the engine keeps each job posting's own
+// evidence snippet, which it otherwise drops for the roles the digest lists.
+const noJobsDigestEnv = "LAST30DAYS_NO_JOBS_DIGEST=1"
+
+// noReportChecklistEnv has the engine end compact output at its canonical
+// boundary. Otherwise it prints, after the boundary, a checklist of the
+// skill's report format, which an MCP client is not asked to follow: the tool
+// description above is this server's presentation guidance.
+const noReportChecklistEnv = "LAST30DAYS_NO_REPORT_CHECKLIST=1"
+
+const (
+	canonicalOutputEnd     = "# END OF last30days CANONICAL OUTPUT"
+	reportChecklistHeading = "## Before you write the report"
+)
+
 // Register adds every tool this server exposes to s. The caller supplies a
 // Config so test harnesses can pin a version without touching globals.
 func Register(s *server.MCPServer, cfg Config) {
@@ -105,8 +121,53 @@ func makeResearchHandler(cfg Config) server.ToolHandlerFunc {
 		if runErr != nil {
 			return mcplib.NewToolResultError(formatRunError(runErr, res)), nil
 		}
-		return mcplib.NewToolResultText(string(res.Stdout)), nil
+		return mcplib.NewToolResultText(withoutReportChecklist(withoutJobsDigest(string(res.Stdout)))), nil
 	}
+}
+
+// withoutJobsDigest drops the engine's "## Jobs Digest" evidence section. The
+// digest is raw role text that the skill's instruction files say how to
+// weigh, and an MCP client never sees those files; the footer's Jobs line,
+// outside the section, is kept. The engine is already asked for no digest
+// (noJobsDigestEnv), so this is the second check, for an engine that prints
+// one anyway. The section runs to the next "## " heading or
+// to the end of the evidence block, and scraped text inside it cannot start
+// either: the engine keeps each role on one line that starts with "- ".
+func withoutJobsDigest(output string) string {
+	lines := strings.SplitAfter(output, "\n")
+	kept := lines[:0:0]
+	inDigest := false
+	for _, line := range lines {
+		text := strings.TrimRight(line, "\r\n")
+		if text == "## Jobs Digest" {
+			inDigest = true
+			continue
+		}
+		if inDigest && (strings.HasPrefix(text, "## ") || strings.HasPrefix(text, "<!-- END EVIDENCE")) {
+			inDigest = false
+		}
+		if !inDigest {
+			kept = append(kept, line)
+		}
+	}
+	return strings.Join(kept, "")
+}
+
+// withoutReportChecklist ends the engine's output at its canonical boundary
+// when a report checklist follows it. The engine is already asked for none
+// (noReportChecklistEnv), so this is the second check, for an engine that
+// prints one anyway. Only a heading after the last boundary line counts: the
+// same words earlier in the output are evidence text.
+func withoutReportChecklist(output string) string {
+	boundary := strings.LastIndex(output, canonicalOutputEnd)
+	if boundary < 0 {
+		return output
+	}
+	end := boundary + len(canonicalOutputEnd)
+	if !strings.Contains(output[end:], "\n"+reportChecklistHeading) {
+		return output
+	}
+	return output[:end] + "\n"
 }
 
 func researchRunArgs(topic, emit, saveDir string) []string {
@@ -124,7 +185,7 @@ func researchRunArgs(topic, emit, saveDir string) []string {
 }
 
 func researchExtraEnv() []string {
-	return []string{allowEnginePlanEnv}
+	return []string{allowEnginePlanEnv, noJobsDigestEnv, noReportChecklistEnv}
 }
 
 func browserCookiesAllowed() bool {

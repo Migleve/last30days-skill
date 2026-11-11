@@ -120,6 +120,31 @@ def _no_arctic_network():
 
 
 @pytest.fixture(autouse=True)
+def _no_reddit_kept_thread_comments():
+    """The post-ranking comment pass fetches reddit.com for every kept Reddit
+    thread, so any in-process run that keeps one would reach the network.
+    Default it to a no-op; its own tests override this fixture."""
+    with mock.patch(
+        "lib.reddit_keyless.enrich_source_items", side_effect=lambda items, **_kwargs: items,
+    ):
+        yield
+
+
+@pytest.fixture(autouse=True)
+def _no_company_lookup_network(monkeypatch):
+    """The company lookup needs no key and runs for every company-shaped topic,
+    so any in-process engine run would reach Wikidata. Default its HTTP seam to
+    "no match"; the resolver's own tests replace ``get`` on the same seam."""
+    from types import SimpleNamespace
+
+    from lib import company_resolve
+
+    monkeypatch.setattr(
+        company_resolve, "http", SimpleNamespace(get=lambda *_args, **_kwargs: {"search": []}),
+    )
+
+
+@pytest.fixture(autouse=True)
 def _no_ambient_grok_cli():
     """Default the grok CLI to absent so no test resolves it from the developer's
     own machine. grok is a new X-chain backend whose availability is a plain
@@ -169,13 +194,19 @@ def _reset_reddit_keyless_memo():
     from lib import http as _http
     from lib import reddit as _reddit
 
-    _http.reset_reddit_keyless_memo()
-    _reddit.reset_scrapecreators_memo()
-    _fetch_memo.reset()
+    from lib import reddit_arctic as _reddit_arctic
+    from lib import reddit_search as _reddit_search
+
+    def _reset():
+        _http.reset_reddit_keyless_memo()
+        _reddit.reset_scrapecreators_memo()
+        _reddit_arctic.reset_memo()
+        _reddit_search.reset_run_state()
+        _fetch_memo.reset()
+
+    _reset()
     yield
-    _http.reset_reddit_keyless_memo()
-    _reddit.reset_scrapecreators_memo()
-    _fetch_memo.reset()
+    _reset()
 
 
 @pytest.fixture(autouse=True)
