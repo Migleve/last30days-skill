@@ -495,6 +495,9 @@ def _normalize_shortform_video(
         snippet=caption,
         metadata={
             "hashtags": item.get("hashtags") or [],
+            # True only when the snippet is a spoken-word transcript, not the
+            # written description fetch_captions starts from.
+            "spoken_caption": bool(item.get("caption_is_transcript")),
             "top_comments": _remap_comments(
                 item.get("top_comments") or [],
                 # Instagram comments use comment_like_count as the vote field
@@ -963,6 +966,9 @@ def _normalize_amazon(
             # swings with keyword phrasing, so filtering can blank the lane.
             "sponsored": bool(item.get("sponsored")),
             "top_comments": top_comments,
+            # The review lane already fired for this product set (search
+            # time), so finalize must not pull again.
+            "reviews_attempted": bool(item.get("reviews_attempted")),
             "product_rating": item.get("product_rating"),
             "product_rating_count": item.get("product_rating_count") or 0,
             "star_distribution": item.get("star_distribution") or {},
