@@ -9,6 +9,34 @@ This project uses [towncrier](https://towncrier.readthedocs.io/). Upcoming notes
 
 <!-- towncrier release notes start -->
 
+## [3.38.1] - 2026-11-12
+
+### Fixed
+
+- A slow second Digg search near the end of a run no longer costs the stories the first search found: the highest-scored call now ends five seconds before the run's deadline, and is skipped when that little time is left. When two searches return the same event as a prominent story and as a smaller one, the prominent story is the copy kept, so its quotes and its "Also in Digg story" confirmations are not lost.
+
+
+## [3.38.0] - 2026-11-12
+
+### Changed
+
+- A research run now looks at far more Digg stories, both the most relevant and the highest-scored, and holds them to a bar. A story is kept only when its title carries the topic, so a story that mentions the topic in passing is dropped and a topic Digg does not cover shows no Digg results. The biggest on-topic stories lead Digg's results, and only those have their sources read (up to 8 at default depth, 12 at deep, four at a time) and can mark another result "Also in Digg story". Digg's footer totals rise on busy topics because bigger stories are kept. Quick depth still makes one small search, with the bar applied to it. Clusters from `digg-pp-cli` 2026.10.x are not judged and behave as before.
+
+
+## [3.37.1] - 2026-11-12
+
+### Fixed
+
+- Digg search no longer fails on two-letter topics such as "AI" or "Go", or on queries over 120 characters: the newer `digg-pp-cli` rejects both, so the query is now fitted to the length it accepts. A Digg story that the subject or identity filters rejected no longer comes back as the "Also in Digg story" confirmation of another result. The story-sources fetch is now always bounded by the run's deadline, including on hosts that keep that deadline on a copy of the run config.
+
+
+## [3.37.0] - 2026-11-12
+
+### Added
+
+- Digg is now searched across every Digg topic (AI, tech, world and business, sports, science, gaming, entertainment) instead of AI and tech only. Digg stories rank by their Digg Score, which is shown on each item, and results from other sources that are sources of a Digg story are marked as confirmed by Digg and rank higher. Global trending (`--discover` with no domain) now includes Digg's current top stories. This needs a current `digg-pp-cli`: an older one keeps working on AI and tech, and the brief and `doctor` say how to upgrade.
+
+
 ## [3.36.1] - 2026-11-11
 
 ### Fixed
