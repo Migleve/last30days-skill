@@ -14,9 +14,10 @@ from pathlib import Path
 import pytest
 
 from tests import jobs_signals_rule as rule
-from tests.skill_contract import ROUTES, reference_text, routing_table
+from tests.skill_contract import ROUTES, reference_text, root_text, routing_table
 
-CONDITION = "Hiring intent or an engine ## Hiring Signals or ## Jobs Digest block"
+CONDITION = "Hiring intent or an engine ## Hiring Signals, ## Jobs Digest or ## Patent Digest block"
+ROUTED = ("hiring-signals", "patent-signals")
 SECTION_HEADING = "## Jobs Page Secret Signals (default company runs)\n"
 CLOSING = "These are open postings, not hires or announcements."
 LABELLED = json.loads(
@@ -42,8 +43,16 @@ def _rule(marker):
 
 
 def test_a_jobs_digest_in_the_engine_output_routes_the_reference():
-    assert ROUTES[CONDITION] == ("hiring-signals",)
-    assert routing_table()[CONDITION] == ("hiring-signals",)
+    # One row routes the jobs reference and the patent reference together.
+    assert ROUTES[CONDITION] == ROUTED
+    assert routing_table()[CONDITION] == ROUTED
+    row = next(line for line in root_text().splitlines() if "`## Jobs Digest`" in line)
+    assert row.startswith(
+        "| Hiring intent or an engine `## Hiring Signals`, `## Jobs Digest` or `## Patent Digest` block "
+        "| Read [references/hiring-signals.md](references/hiring-signals.md) and "
+        "[references/patent-signals.md](references/patent-signals.md) in full. |"
+    )
+    assert "Apply the jobs lane and its scoped planning exception" in row
     opening = reference_text("hiring-signals").split("\n## ", 1)[0]
     assert "`## Jobs Digest`" in opening
     assert "`--hiring-signals`" in opening
@@ -54,10 +63,13 @@ def test_synthesis_names_the_section_its_place_and_its_rules():
     marker = "**Jobs Page Secret Signals.**"
     assert synthesis.count(marker) == 1
     gate = synthesis.split(marker, 1)[1].split("\n\n", 1)[0]
-    assert "`## Jobs Digest`" in gate
-    assert "`hiring-signals.md`" in gate
-    assert "after the last story paragraph" in gate
-    assert "before `KEY PATTERNS from the research:`" in gate
+    assert gate.strip() == (
+        "When the engine output has a `## Jobs Digest` section, `hiring-signals.md` decides "
+        "whether this section is written after the last story paragraph and before "
+        "`KEY PATTERNS from the research:`. A `## Patent Digest` section means "
+        "`patent-signals.md` decides whether a Patent Secret Signals section follows it. "
+        "Most runs omit both."
+    )
     # It sits with the other body rules, ahead of the footer steps.
     assert synthesis.index("**Pitch-vs-pulse beat") < synthesis.index(marker)
     assert synthesis.index(marker) < synthesis.index("**THEN - Quality Nudge")
@@ -81,6 +93,26 @@ def test_no_digest_means_no_section_so_unowned_boards_never_feed_it():
     assert "only for a board the company owns" in gate
     assert "`## Hiring Signals`" in gate
     assert "memory" in gate
+    assert "a board you read yourself" in gate
+
+
+def test_digest_names_story_matched_roles_and_the_story_search_status():
+    text = reference_text("hiring-signals")
+    digest = text.split("## What the engine prints\n", 1)[1].split("\n## ", 1)[0]
+    assert "tagged with the story term it matched" in digest
+    for status in ("story search: N terms, M matches", "story search: no matches", "story search: not run"):
+        assert f"`{status}`" in digest, status
+
+
+def test_story_matched_roles_are_checked_first_but_still_pass_the_bar():
+    story = _rule("**Story matches first.**")
+    assert "Check the roles the digest tags with a story term before the others" in story
+    assert "still qualifies only by two of tests 1 to 3, or by test 4" in story
+    assert "`story search: no matches`" in story
+    assert "omit the section" in story
+    section = _section()
+    assert section.index("**The bar.**") < section.index("**Story matches first.**")
+    assert section.index("**Story matches first.**") < section.index("**How many.**")
 
 
 # --- the bar and the floor -----------------------------------------------------------
@@ -139,22 +171,26 @@ def test_a_cluster_of_three_or_more_postings_is_one_signal():
 
 def test_each_signal_says_what_is_hired_for_and_why_it_is_interesting():
     paragraph = _rule("**Each signal paragraph**")
-    assert "two to three sentences" in paragraph
+    assert "is two sentences" in paragraph
+    assert "lead with what the role is" in paragraph
     assert "**What the company is hiring for.**" in paragraph
     assert "**Why it is interesting.**" in paragraph
-    assert "what it suggests and why that matters this month" in paragraph
+    assert "what the hire would let the company do, or what it suggests and why that matters this month" in paragraph
     assert "tied to a story in this report when one exists" in paragraph
     assert '"which suggests", "that points to"' in paragraph
     assert "never as an announced fact" in paragraph
+    assert "never say the company is building, will ship or has decided anything" in paragraph
     assert "say how many postings there are and cite two of them" in paragraph
-    assert rule.CLUSTER_POSTINGS_CITED == 2 and rule.MAX_PARAGRAPH_SENTENCES == 3
+    assert rule.CLUSTER_POSTINGS_CITED == 2 and rule.MAX_PARAGRAPH_SENTENCES == 2
+    assert rule.MAX_QUOTE_WORDS == 12
 
 
 def test_section_length_is_a_lead_in_two_short_paragraphs_at_most_and_the_closing_line():
     length = _rule("**Length.**")
-    assert "at most two signal paragraphs of two to three sentences each" in length
+    assert "The lead-in running into the first signal" in length
+    assert "at most two signal paragraphs of two sentences each" in length
     assert "Nothing more." in length
-    assert rule.max_section_paragraphs() == 4
+    assert rule.max_section_paragraphs() == 3
 
 
 # --- the web check ------------------------------------------------------------------
@@ -186,6 +222,11 @@ def test_format_is_a_lead_in_then_one_list_free_paragraph_per_signal():
     fmt = _rule("**Format.**")
     assert "`**Jobs Page Secret Signals** - `" in fmt
     assert "as the engine printed them" in fmt
+    assert "runs straight into the first signal" in fmt
+    assert "carries the board's open-role count and its new-in-window count as a clause" in fmt
+    assert "not a sentence of its own" in fmt
+    assert "Leave the new-in-window count out when the `Board:` line has none" in fmt
+    assert "the open-role count too when the `Board:` line prints none" in fmt
     assert "one short paragraph per signal" in fmt
     assert "no bullets, no numbered list, no `##` header" in fmt
 
@@ -210,13 +251,15 @@ def test_format_example_is_list_free_and_ends_on_the_disclaimer():
     assert lines[-1] == CLOSING
     for line in lines:
         assert not re.match(r"\s*(?:[-*•]\s|\d+[.)\\]|#)", line), line
-    # Lead-in, a single-posting signal, a cluster signal, the closing line.
+    # The lead-in running into a single-posting signal, a cluster signal, the closing line.
     assert len(lines) == rule.max_section_paragraphs()
-    for paragraph in lines[1:-1]:
-        sentences = [part for part in re.split(r"(?<=[.!?])\s+(?=[{A-Z])", paragraph) if part]
-        assert 2 <= len(sentences) <= rule.MAX_PARAGRAPH_SENTENCES, paragraph
-        assert re.search(r"points to|suggests", paragraph), paragraph
-    assert lines[2].count("]({posting URL})") == rule.CLUSTER_POSTINGS_CITED
+    opening = rule.sentences(lines[0])[0]
+    assert "{N} open roles" in opening and "({M} posted in the window)" in opening
+    for paragraph in lines[:-1]:
+        assert len(rule.sentences(paragraph)) == rule.MAX_PARAGRAPH_SENTENCES, paragraph
+        assert rule.paragraph_ok(paragraph), paragraph
+    assert lines[0].count("]({posting URL})") == 1
+    assert lines[1].count("]({posting URL})") == rule.CLUSTER_POSTINGS_CITED
 
 
 def test_standout_may_be_a_key_pattern_and_the_footer_stays_the_engines():
@@ -356,3 +399,19 @@ def test_rule_arithmetic_at_the_edges():
     assert not rule.qualifies([2], postings=5)
     assert rule.wording({"public": None}) == "check first"
     assert not rule.standout({"tests": [1, 2, 3], "public": None})
+
+
+PARAGRAPHS = {paragraph["case"]: paragraph for paragraph in LABELLED["paragraphs"]}
+
+
+@pytest.mark.parametrize("case", sorted(PARAGRAPHS))
+def test_each_labelled_paragraph_gets_its_expected_verdict(case):
+    paragraph = PARAGRAPHS[case]
+    assert paragraph["expected"] in {"valid", "invalid"}
+    assert rule.paragraph_ok(paragraph["text"]) is (paragraph["expected"] == "valid"), case
+
+
+def test_a_three_sentence_paragraph_is_rejected():
+    three = PARAGRAPHS["Three sentences"]["text"]
+    assert len(rule.sentences(three)) == 3
+    assert not rule.paragraph_ok(three)

@@ -266,3 +266,102 @@ def test_host_plan_naming_jobs_on_a_person_topic_fetches_jobs():
     )
     assert _planned(report) == [["reddit", "jobs"], ["hackernews"]]
     assert "jobs" in fetched
+
+
+# ---- #1449: backfill only lanes that can run this session ----
+
+def _backfill(available, monkeypatch, can_run, **kwargs):
+    from lib import trustpilot
+
+    calls = []
+
+    def fake_can_run(config=None):
+        calls.append(config)
+        return {"can_run": can_run}
+
+    monkeypatch.setattr(trustpilot, "can_run_now", fake_can_run)
+    plan = planner._sanitize_plan(
+        plan_with(["reddit"]), "test topic", available, None, "default",
+        honor_plan_sources=True,
+    )
+    pipeline._ensure_unplanned_lanes_in_host_plan(plan, available, **kwargs)
+    return plan.subqueries[0].sources, calls
+
+
+def test_trustpilot_without_a_session_is_not_backfilled(monkeypatch, capsys):
+    sources, calls = _backfill(["reddit", "trustpilot", "digg"], monkeypatch, can_run=False)
+    assert sources == ["reddit", "digg"]
+    assert calls
+    err = capsys.readouterr().err
+    assert "Not adding trustpilot" in err
+    assert "Added installed/opted-in/requested sources" in err
+    assert "digg" in err and "trustpilot" not in err.split("Added")[1]
+
+
+def test_trustpilot_that_can_run_is_still_backfilled(monkeypatch):
+    sources, _ = _backfill(["reddit", "trustpilot"], monkeypatch, can_run=True)
+    assert sources == ["reddit", "trustpilot"]
+
+
+@pytest.mark.parametrize("kwargs", [
+    {"requested_sources": ["reddit", "trustpilot"]},
+    {"trustpilot_domain": "example.com"},
+])
+def test_explicitly_requested_trustpilot_is_backfilled_without_a_session(monkeypatch, kwargs):
+    sources, calls = _backfill(["reddit", "trustpilot"], monkeypatch, can_run=False, **kwargs)
+    assert sources == ["reddit", "trustpilot"]
+    assert calls == []
+
+
+def test_arxiv_backfill_is_unchanged_and_never_probes_trustpilot(monkeypatch):
+    sources, calls = _backfill(["reddit", "arxiv"], monkeypatch, can_run=False)
+    assert sources == ["reddit", "arxiv"]
+    assert calls == []
+
+
+def test_runbook_describes_host_plan_backfill_honestly():
+    from tests.skill_contract import reference_text
+
+    runbook = reference_text("research-runbook")
+    assert "never expands a narrow list" not in runbook
+    assert "is added to the primary subquery" in runbook
+    assert "`EXCLUDE_SOURCES` or `--search` keeps one out" not in runbook
+    assert "exclusions win." in runbook
+    assert "plus top-level `jobs_queries`: 2-4 product or team terms" in runbook
+    assert "Trustpilot when `trustpilot_can_run` is false" in runbook
+
+
+def test_search_list_dropping_a_plan_source_warns_once_naming_it(capsys):
+    report, fetched = _run_with_plan(
+        "test topic", plan_with(["reddit", "tiktok"], ["tiktok"]),
+        requested_sources=["reddit", "x"],
+    )
+    assert [sq.label for sq in report.query_plan.subqueries] == ["part-0"]
+    assert "tiktok" not in fetched
+    err = capsys.readouterr().err
+    warnings = [line for line in err.splitlines() if "--search dropped" in line]
+    assert len(warnings) == 1
+    assert "tiktok" in warnings[0]
+    # The subquery whose only source was tiktok is skipped, and the warning
+    # still names tiktok rather than leaving it to the skip line.
+    assert "Skipping external-plan subquery part-1" in err
+
+
+@pytest.mark.parametrize("plan_sources, config", [
+    # Not installed: the mock run cannot serve stocktwits.
+    (["reddit", "stocktwits"], {}),
+    # Engine-attached lanes.
+    (["reddit", "amazon"], {}),
+    (["reddit", "corpus"], {}),
+    (["reddit", "meta_ads"], {}),
+    # Excluded by the user, not by --search.
+    (["reddit", "tiktok"], {"EXCLUDE_SOURCES": "tiktok"}),
+])
+def test_sources_search_did_not_drop_never_warn(plan_sources, config, capsys):
+    with patch.object(pipeline, "_retrieve_stream", return_value=([], {})):
+        pipeline.run(
+            topic="test topic", config=config, mock=True, web_backend="none",
+            depth="default", requested_sources=["reddit"],
+            external_plan=plan_with(plan_sources),
+        )
+    assert "--search dropped" not in capsys.readouterr().err

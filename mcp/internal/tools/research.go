@@ -22,7 +22,9 @@ type Config struct {
 
 // BrowserCookiesEnvOverride is an explicit MCP-layer opt-in. It only removes
 // the default-deny CLI flag; the engine still enforces its own recorded
-// browser-cookie consent and configuration.
+// browser-cookie consent and configuration. The logged-in Reddit session also
+// needs its own recorded Reddit consent (REDDIT_BROWSER_CONSENT), so this
+// override alone never unlocks a reddit.com cookie read.
 const BrowserCookiesEnvOverride = "LAST30DAYS_MCP_ALLOW_BROWSER_COOKIES"
 
 // allowEnginePlanEnv lets the engine use its internal planner. The research
@@ -35,6 +37,12 @@ const allowEnginePlanEnv = "LAST30DAYS_ALLOW_ENGINE_PLAN=1"
 // no digest to stand in for them, the engine keeps each job posting's own
 // evidence snippet, which it otherwise drops for the roles the digest lists.
 const noJobsDigestEnv = "LAST30DAYS_NO_JOBS_DIGEST=1"
+
+// noPatentDigestEnv has the engine skip the patent lane: no USPTO search is
+// made and no "## Patent Digest" section is printed. How to weigh that digest
+// is told in a skill reference an MCP client never sees. The variable stops
+// the fetch itself, so there is no section for this server to filter out.
+const noPatentDigestEnv = "LAST30DAYS_NO_PATENT_DIGEST=1"
 
 // noReportChecklistEnv has the engine end compact output at its canonical
 // boundary. Otherwise it prints, after the boundary, a checklist of the
@@ -185,7 +193,7 @@ func researchRunArgs(topic, emit, saveDir string) []string {
 }
 
 func researchExtraEnv() []string {
-	return []string{allowEnginePlanEnv, noJobsDigestEnv, noReportChecklistEnv}
+	return []string{allowEnginePlanEnv, noJobsDigestEnv, noPatentDigestEnv, noReportChecklistEnv}
 }
 
 func browserCookiesAllowed() bool {

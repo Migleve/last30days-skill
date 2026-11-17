@@ -62,6 +62,8 @@ The Judge Agent must:
 
 4. **Show ONLY % odds. NEVER mention dollar volumes, liquidity, or betting amounts.**
 
+5. **`## Polymarket Markets` lists ranked candidates.** Lead with the most interesting open question among the top entries, not automatically the first. Always mention a team's title odds when shown, even when low, and a related person leading a race.
+
 ### X Reply Cluster Weighting
 
 When you see a cluster of replies to a recommendation-request tweet (someone asking "what's the best X?" and getting multiple independent responses), call this out prominently. This is the strongest form of community endorsement - real people independently making the same recommendation without coordination. Example: "In a thread where @ecom_cork asked for Loom alternatives, every reply said Tella."
@@ -101,9 +103,6 @@ ELI5 Mode: Explain it to me like I'm 5 years old.
 Example - normal: "Arizona's identity is paint scoring (50%+ shooting, 9th nationally) and rebounding behind Big 12 Player of the Year Jaden Bradley."
 Example - ELI5: "Arizona wins by being physical - they score most of their points close to the basket and they're one of the best shooting teams in the country."
 
-Same data. Same sources. Just clearer.
-
-
 ### For all QUERY_TYPEs
 
 Identify from the ACTUAL RESEARCH OUTPUT:
@@ -124,7 +123,6 @@ Identify from the ACTUAL RESEARCH OUTPUT:
 
 **FIRST - What I learned (based on QUERY_TYPE):**
 
-
 **Recommendation body:** use the root-gated `recommendations.md` template for recommendation intent.
 
 **If PROMPTING/NEWS/GENERAL** - Show synthesis and patterns:
@@ -135,7 +133,7 @@ Identify from the ACTUAL RESEARCH OUTPUT:
 
 **ODDS LINE.** Polymarket odds for a market that names the topic and bears on a story go on its own blockquote line under that story's paragraph: `> 📊 Polymarket · Huang divorce: 9.5% by Dec 31 (down 1 pt today) · 18% by Mar 31, 2027`. Copy the whole odds line from `## Polymarket Markets`, up to the ` — ` before its URL. At most three in the report, apart from the six quote lines. The paragraph says what the market is about and links it, and does not repeat the line's numbers. Other markets may be cited inline. Not in `exec`, RECOMMENDATIONS, or COMPARISON.
 
-**NO MARKDOWN LISTS ON CLAUDE CODE.** When `CLAUDECODE` is set, write no markdown list in the reply: while a list streams, Claude Code can redraw every link as `label (url)`. Write numbered markers as `1\.` (escaped period) and bullets as `• ` instead of `- `, one per line with no blank lines between. Other hosts keep normal lists.
+**NO MARKDOWN LISTS ON CLAUDE CODE.** With `CLAUDECODE` set, the report checklist's list line decides the format. Without one, write no markdown list (a streaming list can redraw every link as `label (url)`): write `1\.` and `• ` lines, each but the block's last ending in `\` (label line too), no blank lines between. Other hosts keep normal lists.
 
 CITATION RULE: Meet higher-priority host/tool requirements and user instructions for attribution. Apply the following brevity defaults only after including the required citations.
 - In the "What I learned" intro: cite 1-2 top sources total, not every sentence
@@ -169,8 +167,7 @@ users are saying/feeling, then add web context only if needed.
 
 **MANDATORY - bold headline per narrative paragraph.** Every paragraph in the "What I learned" section MUST begin with a bolded headline phrase that summarizes the paragraph, followed by ` - ` (a SINGLE HYPHEN with spaces on both sides, NOT an em-dash) and the body text. Pattern: `**Headline phrase** - body text describing what people are saying...`. Without the bold headline, the output is unscannable slop. The headline is report structure: a general style preference alone does not remove it; the root output contract names the cases that do.
 
-
-Apply root LAWs 2–4 to the following normal-query template. Comparison uses its separate template.
+Apply root LAWs 2-4 to the following normal-query template. Comparison uses its separate template.
 
 ```
 {the engine's first line, copied verbatim}
@@ -199,11 +196,11 @@ Headlines should be specific and newsy ("BULLY dropped and it's dominating", "Eu
 
 **Pitch-vs-pulse beat (company / product / service topics).** If you captured `RESOLVED_POSITIONING` in Step 0.55 AND the month's evidence directly bears on it, work in ONE bold-lead-in paragraph saying how. Three cases qualify: the pulse SUPPORTS a specific claim (e.g. `**"Zero-config" is holding up** - this month's top deploy thread is devs praising the no-setup flow`), CUTS AGAINST one (e.g. `**Stripe's fraud-fighting pitch took a direct hit** - the loudest thread this month, on Hacker News, argues it is friendly to "friendly fraud"`), or the conversation is squarely ABOUT the pitched ground. Always anchor to the real top item, named by where it ran, and keep claims windowed - "this month's conversation" - never trend verbs like "losing the narrative" that one 30-day window cannot support. If the month's conversation is orthogonal to the pitch - on-entity but about something the pitch doesn't speak to - write NOTHING about the pitch; a manufactured connection is worse than silence. Match altitude: test SPECIFIC claims ("zero-config", "fastest", an uptime number) against specific threads; never grade a broad tagline against an individual thread. Keep it a bold-lead-in paragraph, not a `##` section (LAW 4). Skip silently for people (always - the beat can cover MrBeast the company, never Jimmy Donaldson the person), events, abstract concepts, and ownerless topics (Bitcoin), and whenever positioning was not actually fetched this run - never supply a pitch from memory.
 
-**Jobs Page Secret Signals.** When the engine output has a `## Jobs Digest` section, `hiring-signals.md` decides whether this section is written after the last story paragraph and before `KEY PATTERNS from the research:`. Most runs omit it.
+**Jobs Page Secret Signals.** When the engine output has a `## Jobs Digest` section, `hiring-signals.md` decides whether this section is written after the last story paragraph and before `KEY PATTERNS from the research:`. A `## Patent Digest` section means `patent-signals.md` decides whether a Patent Secret Signals section follows it. Most runs omit both.
 
 **THEN - Quality Nudge (if present in the output):**
 
-If the research output contains a `**🔍 Research Coverage:**` block, render it verbatim right before the stats block. This tells the user which core sources are missing and how to unlock them. If it is absent (100% coverage), render no nudge.
+If the research output contains a `**🔍 Research Coverage:**` block, render it verbatim right before the stats block. If it is absent (100% coverage), render no nudge.
 
 **Optional X omission:** If X was unavailable because no X authentication was configured, finish the useful findings first. The engine emits one short, non-blocking note: `Optional source omitted: X/Twitter was not enabled; research continued with the available sources.` Render that note once if present. Do not repeat it. Do not open a modal, ask another question, recommend a login, or provide cookie/API setup instructions unless the user explicitly asks to enable X. On a Grok Bot host the engine's own X hint (connect X inside Grok Bot, a bearer token, or a credit top-up) is the only guidance; relay it once, unchanged, and the note does not fire at all when the X connector lane served the run.
 
