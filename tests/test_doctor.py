@@ -776,49 +776,29 @@ class IncludeSourcesTokenParsing(unittest.TestCase):
 
 
 class YoutubeTranscriptionNote(unittest.TestCase):
-    """F7: yt-dlp probes OK but no GROQ_API_KEY/OPENAI_API_KEY -> the ok
-    youtube record carries the caption-free note plus the
-    transcription_key_missing fix, and (F14) the text renderer surfaces
-    that fix even though the record's tier is ok."""
+    """The caption-free transcription module is not called by any source yet,
+    so doctor must not prescribe a GROQ_API_KEY/OPENAI_API_KEY for it: the key
+    would change nothing. A healthy yt-dlp YouTube record carries no
+    transcription note and no fix."""
 
     def setUp(self):
         self.report = _build({}, probe_map={"yt-dlp": health.OK})
-        self.entry = prescriptions.get("youtube", "transcription_key_missing")
 
-    def test_ok_record_carries_note_and_fix(self):
+    def test_ok_record_prescribes_no_transcription_key(self):
         record = self.report["sources"]["youtube"]
         self.assertEqual("ok", record["tier"])
         self.assertEqual("ok", record["status"])
-        note = record["note"].lower()
-        # Honest note: affirms the working path, scopes the key to caption-free.
-        self.assertIn("search + transcripts work", note)
-        self.assertIn("caption-free", note)
-        # Does not read as broken and does not attribute comment text to yt-dlp.
-        self.assertNotIn("no transcription key for caption-free videos", note)
-        self.assertIn(self.entry.fix_nl, record["fix"])
-        self.assertIn(self.entry.fix_cli, record["fix"])
+        self.assertNotIn("caption-free", (record.get("note") or "").lower())
+        self.assertNotIn("GROQ_API_KEY", record.get("fix") or "")
+        self.assertNotIn("GROQ_API_KEY", doctor.render_text(self.report))
 
     def test_no_paid_comment_prescription_when_ytdlp_is_installed(self):
         # yt-dlp fetches comment text free. With it installed, doctor must NOT
-        # tell the user to buy a ScrapeCreators key for comments — that would
+        # tell the user to buy a ScrapeCreators key for comments, which would
         # be selling a fix for a problem they do not have.
-        note = self.report["sources"]["youtube"]["note"].lower()
+        note = (self.report["sources"]["youtube"].get("note") or "").lower()
         self.assertNotIn("comment text needs", note)
         self.assertNotIn("scrapecreators", note)
-
-    def test_text_line_includes_the_fix_on_the_ok_line(self):
-        text = doctor.render_text(self.report)
-        # Located by source name, not glyph: the four-state audit sorts a
-        # no-run-evidence ok source to UNVERIFIED, but the transcription fix
-        # must still ride the youtube line.
-        line = next(
-            l
-            for l in text.splitlines()
-            if " youtube" in l and "search + transcripts work" in l
-        )
-        self.assertIn("search + transcripts work", line)
-        self.assertIn(f"fix: {self.entry.fix_nl}", line)
-        self.assertIn(self.entry.fix_cli, line)
 
 
 class YoutubeCommentsFixLine(unittest.TestCase):
@@ -855,11 +835,6 @@ class YoutubeCommentsFixLine(unittest.TestCase):
         self.assertIn("comment text needs", note)
         self.assertIn("yt-dlp (free)", note)
         self.assertTrue(record["fix"], "comment-text caveat must carry a fix")
-
-    def test_transcription_fix_takes_precedence_when_both_fire(self):
-        record = _build({}, probe_map={"yt-dlp": health.OK})["sources"]["youtube"]
-        entry = prescriptions.get("youtube", "transcription_key_missing")
-        self.assertIn(entry.fix_nl, record["fix"])
 
 
 class YoutubeHealthyWhenFullyConfigured(unittest.TestCase):
@@ -1289,7 +1264,7 @@ class LiveProbe(unittest.TestCase):
         self.assertIn("HTTP 200", res["detail"])
         self.assertIn("blocked", res["detail"])
         self.assertFalse(res.get("transient", False))
-        self.assertEqual(1, get.call_count)
+        self.assertEqual(2, get.call_count)
 
     def test_reddit_probe_arctic_failure_fails_the_floor(self):
         res, _get = self._probe_reddit_with_bodies(self.BRAVE_PAGE.read_text(), "<html>down</html>")
@@ -1356,6 +1331,23 @@ class LiveProbe(unittest.TestCase):
         self.assertTrue(res["ok"])
         self.assertNotIn("transient", res)
 
+    def test_reddit_archive_requires_checked_success(self):
+        for code in (400, 404, 422):
+            with mock.patch("lib.doctor._probe_url", side_effect=[
+                {"ok": False, "detail": "HTTP 403", "probed": True},
+                {"ok": True, "detail": f"HTTP {code}", "probed": True},
+            ]):
+                result = doctor._probe_source("reddit", {}, 5)
+            self.assertFalse(result.get("partial", False))
+        with mock.patch("lib.doctor._probe_url", side_effect=[
+            {"ok": False, "detail": "HTTP 403", "probed": True},
+            {"ok": True, "detail": "HTTP 200", "probed": True},
+        ]):
+            result = doctor._probe_source("reddit", {}, 5)
+        self.assertTrue(result["partial"])
+        self.assertEqual(doctor.AUDIT_UNVERIFIED,
+                         doctor.audit_state("reddit", {"tier": doctor.TIER_OK}, probe_result=result))
+
     def test_reddit_probe_403_is_not_retried(self):
         # 403 is the standing keyless block, not a burst. Retrying it only
         # doubles the wait before reporting a real outage.
@@ -1366,7 +1358,7 @@ class LiveProbe(unittest.TestCase):
             mock.patch("lib.doctor.time.sleep") as sleep,
         ):
             res = doctor._probe_source("reddit", {}, 5)
-        self.assertEqual(1, http_ok.call_count)
+        self.assertEqual(2, http_ok.call_count)
         sleep.assert_not_called()
         self.assertFalse(res.get("transient", False))
 
@@ -1399,8 +1391,8 @@ class LiveProbe(unittest.TestCase):
         seen = {}
 
         def capture(req, **kwargs):
-            seen["ua"] = req.get_header("User-agent")
-            seen["accept"] = req.get_header("Accept")
+            seen.setdefault("ua", req.get_header("User-agent"))
+            seen.setdefault("accept", req.get_header("Accept"))
             return 500, None, urllib.error.HTTPError(req.full_url, 500, "boom", {}, None)
 
         with mock.patch("lib.bounded_get.get", capture):

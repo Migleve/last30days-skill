@@ -9,6 +9,29 @@ This project uses [towncrier](https://towncrier.readthedocs.io/). Upcoming notes
 
 <!-- towncrier release notes start -->
 
+## [4.3.2] - 2026-11-17
+
+### Changed
+
+- Exa web search now requests highlights instead of a 2,000-character text extract. When `EXA_API_KEY` is set, Wikidata-empty company resolution can take an official-site lookup in Exa's company index, and competitor discovery queries Exa's company category first for a resolved company even if Brave is the general web backend. ([#1501](https://github.com/mvanhorn/last30days-skill/issues/1501))
+
+### Fixed
+
+- On Windows, Printing Press CLIs (Digg, arXiv, Techmeme, Yahoo Finance) installed to `%LOCALAPPDATA%\Programs\PrintingPress\bin` now activate without a manual PATH edit, off-PATH fixes print a PowerShell command instead of bash `export`, and setup names a missing Go install as the reason a CLI install failed. ([#1434](https://github.com/mvanhorn/last30days-skill/issues/1434))
+- Doctor no longer tells you to add a `GROQ_API_KEY` or `OPENAI_API_KEY` for caption-free YouTube videos. No source calls the transcription module yet, so the key changed nothing. Thanks to @qq2514568380 for spotting it ([#1498](https://github.com/mvanhorn/last30days-skill/pull/1498)). ([#1436](https://github.com/mvanhorn/last30days-skill/issues/1436))
+- Explain unsuccessful X cookie discovery and the manual credential alternative. ([#1499](https://github.com/mvanhorn/last30days-skill/issues/1499))
+- Check Reddit archive availability after discovery failure without treating HTTP errors as working listings. ([#1500](https://github.com/mvanhorn/last30days-skill/issues/1500))
+
+
+## [4.3.1] - 2026-11-17
+
+### Fixed
+
+- Hermes installs work again: `hermes skills install mvanhorn/last30days-skill/skills/last30days --force` no longer gets a `dangerous` verdict from Hermes's skill scanner. The Grok CLI install hint now names `npm install -g @xai-official/grok` (with the official installer linked) instead of a `curl | bash` line, and the CI scanner guard now checks every CRITICAL rule of the current Hermes scanner. `HERMES_SETUP.md` documents the install and update path. ([#1502](https://github.com/mvanhorn/last30days-skill/issues/1502))
+
+  `SKILL.md` no longer names the `scripts/lib` folders as if they were files. Hermes rejected the whole download for that, reporting the skill as a stale index entry whose "files no longer exist upstream". ([#1502](https://github.com/mvanhorn/last30days-skill/issues/1502))
+
+
 ## [4.3.0] - 2026-11-16
 
 ### Changed
