@@ -9,6 +9,40 @@ This project uses [towncrier](https://towncrier.readthedocs.io/). Upcoming notes
 
 <!-- towncrier release notes start -->
 
+## [4.6.0] - 2026-11-22
+
+### Added
+
+- Silent post-turn finished-brief capture across local agent harnesses (Claude Code via `.claude-plugin/hooks.json`, plus one-command `setup --install-hooks` / `--uninstall-hooks` for Antigravity, Gemini CLI, Codex CLI, Cursor, Grok Build CLI, and skill-only Claude Code installs). Captured briefs save atomically into `<save_dir>/finished/` with content-hash deduplication, owner-only permissions and `## From your files` redaction for `--corpus` runs, O(1) incremental `library.db` indexing, brief-first precedence in `library search` and `library feed`, and offline transcript backfill via `library harvest`.
+- TikTok top comments now come from TikTok's public web comment endpoint, which needs no key and no request signing, for up to 12 of the videos a run keeps instead of ScrapeCreators comments on 3. A "Kanye West" run went from 4 TikTok entries in Top Community Comments to 14, with no ScrapeCreators comment calls. If the endpoint returns nothing, the run falls back to ScrapeCreators comments as before. `LAST30DAYS_TIKTOK_PUBLIC_COMMENTS=off` turns the public endpoint off.
+- TikTok works without a ScrapeCreators key, and Instagram works on a best-effort basis. When the key is missing or ScrapeCreators returns HTTP 402, both sources find public post URLs and read each post with `yt-dlp`, logged out. Post URLs come from a self-hosted SearXNG (`LAST30DAYS_SEARXNG_URL`), Serper, Exa (TikTok only), Brave or the keyless floor, and on hosts with their own web search from the new `--shortform-urls` envelope, which the runbook fills from 2-3 `site:tiktok.com` / `site:instagram.com` searches. Discovery asks each backend for recent results (`LAST30DAYS_SHORTFORM_FRESHNESS`), and TikTok also lists the recent on-topic videos of creators seen in discovery (`LAST30DAYS_SHORTFORM_CREATOR_EXPANSION`). Every post is dated from its id before any fetch and again after extraction, so the lane never keeps a post from outside the research window: a thin month returns zero with the reason. Keyless TikTok videos also get their top comments, free, from TikTok's public web comment endpoint (`LAST30DAYS_TIKTOK_PUBLIC_COMMENTS`), the same source keyed runs use. Instagram recall is low (public pages, no view counts) and its comments stay ScrapeCreators-only, and keyless TikTok finds videos through creators rather than keyword search, so the key is still the better path for the month's most viral posts. `doctor` names the discovery sources armed for each platform and calls Instagram best effort. `APIFY_API_TOKEN` is no longer treated as a TikTok search credential (it was never wired to an Apify actor).
+
+### Fixed
+
+- TikTok and Instagram comments from ScrapeCreators now reach the report. Comment enrichment picked the three loudest posts from the raw search results, before the date window and topic filter ran, so it usually paid for comments on old or off-topic posts the report then dropped (for "Kanye West", a 2022 #bully video), and the kept posts had none. It now picks from posts dated inside the window that clear the topic floor.
+
+
+## [4.5.0] - 2026-11-21
+
+### Added
+
+- Add configurable SCRAPECREATORS_BASE_URL to point ScrapeCreators API calls across all modules at an enterprise proxy, local mock server, or alternative provider. ([#1367](https://github.com/mvanhorn/last30days-skill/issues/1367))
+- OpenCode agents with a paired `browse` MCP can now read public X posts and Reddit thread links in the user's logged-in browser and pass them through the existing `--x-posts` / `--reddit-threads` host envelopes. The X footer names the lane as "via OpenCode Browse".
+
+### Fixed
+
+- Browser cookie readers now include host-only cookies while excluding unrelated suffix hosts. Standalone automatic extraction prefers a complete requested cookie set, continues after browser permission denials, and keeps the first partial result only as a fallback without combining browsers. ([#1380](https://github.com/mvanhorn/last30days-skill/issues/1380))
+- Host query plans can use `omit_sources` to keep deliberately skipped optional sources out of a single run without disabling backfill for other sources. ([#1449](https://github.com/mvanhorn/last30days-skill/issues/1449))
+- Add LinkedIn to planner `SOURCE_CAPABILITIES` so queries classified under `how_to` (and `comparison`) retain LinkedIn when enabled. ([#1543](https://github.com/mvanhorn/last30days-skill/issues/1543))
+- Reddit threads from the host lane (`--reddit-threads`) get their archive comments again: `attach_comments` raised `ValueError` on every call, which was logged and swallowed, so those threads had no top comments. ([#1546](https://github.com/mvanhorn/last30days-skill/issues/1546))
+- Recover Windows Firefox cookies on WSL when SQLite cannot open the live WAL index and the database and WAL can be copied without a detected change. If the database stays unreadable, Reddit setup reports a read error instead of asking the user to log in again. ([#1547](https://github.com/mvanhorn/last30days-skill/issues/1547))
+- Bird now drops topic-supplied search operators on both the first request and retries. It keeps quoted phrases such as `"Research and Development"` intact, preserves the research date window, and caps each query at 512 characters.
+- Exa official-site fallback still fills a person's or language/OS domain. Wikidata humans with no unique company, and a direct P31 programming-language or operating-system hit, skip the company competitor index (`company_peer_discovery=keyword`). `company_via_person` stays only for a company the person leads, so patent copy does not call a person's own site "the company they lead." A product company named after its app (Raycast, Exa) still gets company peers. A trailing generic word such as Labs is trimmed once so Modal Labs matches modal.com, but an exact registrable-label match (Acme Labs → acmelabs.com) wins over the trimmed name even if the shorter domain appears first.
+- Per-source voices in report Stats now rank social handles by engagement. Doctor warns when an older Techmeme helper can only read the first page and shows how to upgrade it.
+- The top clusters now share one story cap across linked titles and query angles, leaving more room for distinct stories.
+- TikTok no longer falls back to `APIFY_API_TOKEN`: an Apify-only config used to send that token to ScrapeCreators as an API key and mark TikTok ready with no usable credential. TikTok now requires `SCRAPECREATORS_API_KEY` (found by @grain-lu in #1533).
+
+
 ## [4.4.0] - 2026-11-20
 
 ### Security
